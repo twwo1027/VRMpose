@@ -1,0 +1,38 @@
+{
+  "name": "vrmpose",
+  "version": "0.1.0",
+  "private": true,
+  "description": "VRM pose editor with transparent 4K PNG export",
+  "author": "VRMpose",
+  "type": "module",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "vite --host 127.0.0.1",
+    "build": "vite build",
+    "start": "electron .",
+    "test": "node --test tests/*.test.mjs",
+    "test:smoke": "node scripts/smoke.mjs",
+    "test:desktop": "node scripts/desktop-smoke.mjs",
+    "package:win": "npm run build && electron-builder --win portable --x64",
+    "package:win:dir": "npm run build && electron-builder --win --x64 --dir"
+  },
+  "dependencies": {
+    "@pixiv/three-vrm": "3.5.5",
+    "three": "0.186.1"
+  },
+  "devDependencies": {
+    "electron": "44.7.0",
+    "electron-builder": "26.15.3",
+    "playwright-core": "1.64.0",
+    "vite": "8.3.4"
+  },
+  "build": {
+    "appId": "jp.vrmpose.desktop",
+    "productName": "VRMpose",
+    "asar": true,
+    "directories": { "output": "release" },
+    "files": ["dist/**/*", "electron/**/*", "shared/**/*", "package.json"],
+    "win": { "target": [{ "target": "portable", "arch": ["x64"] }], "signAndEditExecutable": false },
+    "portable": { "artifactName": "VRMpose-${version}-x64.exe" }
+  }
+}
