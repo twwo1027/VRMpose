@@ -1,8 +1,10 @@
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { TransformControls } from 'three/addons/controls/TransformControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { VRMLoaderPlugin, VRMUtils } from '@pixiv/three-vrm';
 import { BONE_LABELS, EXPRESSION_LABELS, normalizePose } from '../shared/pose.mjs';
+import { StudioLighting } from './lighting.js';
 
 const radians = THREE.MathUtils.degToRad;
 const boneOrder = Object.keys(BONE_LABELS);
@@ -16,9 +18,10 @@ function checkedVector(value, limit, label) {
 
 /** A stopped VRM rig: posing never runs automatic gaze or spring-bone simulation. */
 export class PoseViewport {
-  constructor(container, { onBoneSelect } = {}) {
+  constructor(container, { onBoneSelect, onPoseChange } = {}) {
     this.container = container;
     this.onBoneSelect = onBoneSelect;
+    this.onPoseChange = onPoseChange;
     this.vrm = null;
     this.boneNodes = new Map();
     this.boneValues = new Map();
@@ -30,6 +33,8 @@ export class PoseViewport {
     this.hipsPosition = [0, 0, 0];
     this.helpersEnabled = true;
     this.selectedBone = null;
+    this.editMode = 'rotate';
+    this.interactionEnabled = true;
     this.forcedAspect = null;
     this._disposed = false;
     this._exporting = false;
@@ -49,11 +54,21 @@ export class PoseViewport {
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1;
     this.canvas = this.renderer.domElement;
-    this.canvas.setAttribute('aria-label', '3Dモデルのプレビュー。ドラッグで回転、ホイールで拡大縮小。');
+    this.canvas.setAttribute('aria-label', '3Dプレビュー。ボーンの点を選び、色付きのリングで回転。空白のドラッグでカメラを回転、ホイールで拡大縮小。');
     Object.assign(this.canvas.style, { display: 'block', position: 'absolute', left: '50%', top: '50%', transform: 'translate(-50%, -50%)' });
     if (getComputedStyle(container).position === 'static') container.style.position = 'relative';
     container.appendChild(this.canvas);
 
+    this.lighting = new StudioLighting({ scene: this.scene, renderer: this.renderer });
+
+    this.grid = new THREE.GridHelper(6, 30, 0x53677e, 0x293847);
+    this.grid.material.transparent = true;
+    this.grid.material.opacity = 0.42;
+    this.scene.add(this.grid);
+    this._createPlaceholder();
+    this._createBoneHelpers();
+    // Install gizmo listeners first so grabbing a handle cannot start an orbit.
+    this._createTransformControls();
     this.controls = new OrbitControls(this.camera, this.canvas);
     this.controls.enableDamping = true;
     this.controls.dampingFactor = 0.08;
@@ -62,23 +77,11 @@ export class PoseViewport {
     this.controls.maxDistance = 30;
     this.controls.update();
 
-    this.scene.add(new THREE.HemisphereLight(0xe6f3ff, 0x6b7182, 1.8));
-    const keyLight = new THREE.DirectionalLight(0xffffff, 2.2);
-    keyLight.position.set(-2, 4, 3);
-    this.scene.add(keyLight);
-    const rimLight = new THREE.DirectionalLight(0xabcfff, 1.2);
-    rimLight.position.set(3, 2, -3);
-    this.scene.add(rimLight);
-
-    this.grid = new THREE.GridHelper(6, 30, 0x53677e, 0x293847);
-    this.grid.material.transparent = true;
-    this.grid.material.opacity = 0.42;
-    this.scene.add(this.grid);
-    this._createPlaceholder();
-    this._createBoneHelpers();
-
-    this._onPointerDown = event => { this._pointerDown = { x: event.clientX, y: event.clientY, button: event.button }; };
-    this._onPointerUp = event => this._pickBone(event);
+    this._onPointerDown = event => {
+      this._activePointerId = event.pointerId;
+      this._pointerDown = { x: event.clientX, y: event.clientY, button: event.button };
+    };
+    this._onPointerUp = event => { this._activePointerId = null; this._pickBone(event); };
     this.canvas.addEventListener('pointerdown', this._onPointerDown);
     this.canvas.addEventListener('pointerup', this._onPointerUp);
     this._resizeObserver = new ResizeObserver(() => this._resize());
@@ -89,13 +92,156 @@ export class PoseViewport {
       this._animationFrame = requestAnimationFrame(this._animate);
       if (this._exporting) return;
       if (this.placeholder.visible) this.placeholder.rotation.y = time * 0.00012;
-      this.controls.update();
+      if (this.controls.enabled && !this.transformControls.dragging) this.controls.update();
       this.renderer.render(this.scene, this.camera);
     };
     this._animationFrame = requestAnimationFrame(this._animate);
   }
 
   get hasModel() { return Boolean(this.vrm); }
+
+  _stopOrbitMomentum() {
+    if (!this.controls) return;
+    const position = this.camera.position.clone();
+    const quaternion = this.camera.quaternion.clone();
+    const target = this.controls.target.clone();
+    const damping = this.controls.enableDamping;
+    // Consume pending orbit/pan deltas using the public API, then keep the
+    // exact view the user had when editing or exporting began.
+    this.controls.enableDamping = false;
+    this.controls.update();
+    this.camera.position.copy(position);
+    this.camera.quaternion.copy(quaternion);
+    this.controls.target.copy(target);
+    this.controls.enableDamping = damping;
+    this.controls.update();
+  }
+
+  _createTransformControls() {
+    // VRM normalized nodes are edited, while markers follow the rendered rig.
+    // A proxy lets both rigs share a handle without directly modifying raw bones.
+    this.transformProxy = new THREE.Object3D();
+    this.transformProxy.name = 'Bone editing proxy';
+    this.scene.add(this.transformProxy);
+    this.transformControls = new TransformControls(this.camera, this.canvas);
+    this.transformControls.setMode('rotate');
+    this.transformControls.setSpace('local');
+    this.transformControls.setSize(0.85);
+    this.transformHelper = this.transformControls.getHelper();
+    this.scene.add(this.transformHelper);
+    this.transformControls.addEventListener('dragging-changed', event => {
+      if (this.controls) this.controls.enabled = this.interactionEnabled && !this._exporting && !event.value;
+      if (!event.value) {
+        this._transformStart = null;
+        this._syncTransform();
+      }
+    });
+    this.transformControls.addEventListener('mouseDown', () => {
+      this._stopOrbitMomentum();
+      this._gizmoPointer = true;
+      const node = this.boneNodes.get(this.selectedBone);
+      if (node) this._transformStart = { position: node.position.clone(), proxyPosition: this.transformProxy.position.clone() };
+    });
+    this.transformControls.addEventListener('objectChange', () => this._applyTransform());
+    this._onPointerCancel = () => {
+      if (this.transformControls.dragging) {
+        this.transformControls.reset();
+        this.transformControls.pointerUp(null);
+      }
+      if (this._activePointerId != null && this.canvas.hasPointerCapture(this._activePointerId)) this.canvas.releasePointerCapture(this._activePointerId);
+      this._activePointerId = null;
+      // Remove temporary move listeners and reset any active camera gesture.
+      // Reconnect in the same order so the gizmo still takes priority.
+      this.transformControls.disconnect();
+      this.controls?.disconnect();
+      this.transformControls.connect(this.canvas);
+      this.controls?.connect(this.canvas);
+      this._pointerDown = null;
+      this._gizmoPointer = false;
+    };
+    this.canvas.addEventListener('pointercancel', this._onPointerCancel);
+    this._onKeyDown = event => {
+      if (event.key === 'Escape' && this.transformControls.dragging) {
+        event.preventDefault();
+        this._onPointerCancel();
+      }
+    };
+    window.addEventListener('keydown', this._onKeyDown);
+  }
+
+  _syncTransform() {
+    if (this.transformControls.dragging || this._exporting) return;
+    const node = this.boneNodes.get(this.selectedBone);
+    if (!node || this.editMode === 'camera' || !this.interactionEnabled || (this.editMode === 'translate' && this.selectedBone !== 'hips')) {
+      this.transformControls.detach();
+      return;
+    }
+    this.scene.updateMatrixWorld(true);
+    this.displayNodes.get(this.selectedBone).getWorldPosition(this.transformProxy.position);
+    // Use the same normalized axes as the angle sliders, including VRM 0's
+    // facing correction. Extra hair/clothing bones retain their own rest axes.
+    node.getWorldQuaternion(this.transformProxy.quaternion);
+    this.transformProxy.updateMatrixWorld(true);
+    this.transformControls.attach(this.transformProxy);
+  }
+
+  _applyTransform() {
+    if (!this.interactionEnabled || this._exporting || !this.hasModel) return;
+    const key = this.selectedBone;
+    const node = this.boneNodes.get(key);
+    if (!node) return;
+    if (this.editMode === 'rotate') {
+      const parentRotation = node.parent?.getWorldQuaternion(new THREE.Quaternion()) || new THREE.Quaternion();
+      const local = parentRotation.invert().multiply(this.transformProxy.quaternion);
+      const offset = this.boneDefaults.get(key).clone().invert().multiply(local);
+      const euler = new THREE.Euler().setFromQuaternion(offset.normalize(), 'XYZ');
+      const angles = [euler.x, euler.y, euler.z].map(THREE.MathUtils.radToDeg);
+      if (this.isVRM0 && !key.startsWith('extra:')) { angles[0] *= -1; angles[2] *= -1; }
+      this.setBone(key, angles);
+    } else if (this.editMode === 'translate' && key === 'hips') {
+      const start = this._transformStart;
+      // Also support keyboard/programmatic handle changes outside a drag.
+      const origin = start?.proxyPosition || this.displayNodes.get(key).getWorldPosition(new THREE.Vector3());
+      const startPosition = start?.position || node.position;
+      const desired = this.transformProxy.position.clone();
+      const previous = origin.clone();
+      if (node.parent) { node.parent.worldToLocal(desired); node.parent.worldToLocal(previous); }
+      const offset = desired.sub(previous).add(startPosition).sub(this.hipsDefault);
+      const position = [this.isVRM0 ? -offset.x : offset.x, offset.y, this.isVRM0 ? -offset.z : offset.z].map(value => THREE.MathUtils.clamp(value, -5, 5));
+      this.setHipsPosition(position);
+    } else return;
+    this.onPoseChange?.(key);
+  }
+
+  setEditMode(mode) {
+    if (!['rotate', 'translate', 'camera'].includes(mode)) return;
+    if (this.transformControls.dragging) this._onPointerCancel();
+    this.editMode = mode;
+    this.transformControls.setMode(mode === 'translate' ? 'translate' : 'rotate');
+    if (mode === 'translate' && this.hasModel && this.selectedBone !== 'hips') {
+      this.setSelectedBone('hips');
+      this.onBoneSelect?.('hips');
+    }
+    this._syncTransform();
+  }
+
+  getEditMode() { return this.editMode; }
+  setTransformSpace(space) {
+    if (['local', 'world'].includes(space)) this.transformControls.setSpace(space);
+  }
+  getTransformSpace() { return this.transformControls.space; }
+  setInteractionEnabled(enabled) {
+    if (!enabled && this.interactionEnabled) {
+      this._onPointerCancel();
+      this._stopOrbitMomentum();
+    }
+    this.interactionEnabled = Boolean(enabled);
+    this.transformControls.enabled = this.interactionEnabled;
+    this.controls.enabled = this.interactionEnabled && !this._exporting;
+    this._syncTransform();
+  }
+  setLighting(settings) { return this.lighting.setSettings(settings); }
+  getLighting() { return this.lighting.getSettings(); }
 
   _createPlaceholder() {
     this.placeholder = new THREE.Group();
@@ -254,6 +400,7 @@ export class PoseViewport {
     if (box.isEmpty()) box.set(new THREE.Vector3(-0.7, 0, -0.3), new THREE.Vector3(0.7, 1.7, 0.3));
     this.modelBounds = box;
     this.modelHeight = Math.max(box.max.y - box.min.y, 0.1);
+    this.lighting.update(vrm.scene, { restBounds: box });
     this.grid.position.y = box.min.y - 0.005;
     this._buildMarkers();
     this.setView('front');
@@ -273,7 +420,7 @@ export class PoseViewport {
       const marker = new THREE.Mesh(this.markerGeometry, this.markerMaterial);
       marker.userData.boneKey = key;
       marker.renderOrder = 10;
-      marker.scale.setScalar(this.modelHeight * 0.006);
+      marker.scale.setScalar(this.modelHeight * 0.009);
       this.boneHelpers.add(marker);
       this.markers.set(key, marker);
     }
@@ -343,6 +490,8 @@ export class PoseViewport {
     for (const material of this.vrm.materials || []) material.update?.(0);
     this.vrm.scene.updateMatrixWorld(true);
     this._updateHelpers();
+    this._syncTransform();
+    this.lighting.update(this.vrm.scene);
   }
 
   _setBoneWithoutUpdate(key, degrees) {
@@ -417,6 +566,7 @@ export class PoseViewport {
   }
 
   setView(view) {
+    this._stopOrbitMomentum();
     const directions = {
       front: [0, 0, 1], back: [0, 0, -1], left: [1, 0, 0], right: [-1, 0, 0], 'three-quarter': [0.75, 0.1, 1],
     };
@@ -445,17 +595,22 @@ export class PoseViewport {
   }
 
   setSelectedBone(key) {
+    if (this.transformControls.dragging) this._onPointerCancel();
     this.selectedBone = this.boneNodes.has(key) ? key : null;
     for (const [markerKey, marker] of this.markers) {
       marker.material = markerKey === this.selectedBone ? this.selectedMarkerMaterial : this.markerMaterial;
-      marker.scale.setScalar(this.modelHeight * (markerKey === this.selectedBone ? 0.011 : 0.006));
+      marker.scale.setScalar(this.modelHeight * (markerKey === this.selectedBone ? 0.014 : 0.009));
     }
     this._updateHelpers();
+    this._syncTransform();
   }
 
   _pickBone(event) {
     const down = this._pointerDown;
     this._pointerDown = null;
+    const gizmoPointer = this._gizmoPointer;
+    this._gizmoPointer = false;
+    if (gizmoPointer || !this.interactionEnabled || this._exporting) return;
     if (!down || down.button !== 0 || !this.boneHelpers.visible || Math.hypot(event.clientX - down.x, event.clientY - down.y) > 5) return;
     const bounds = this.canvas.getBoundingClientRect();
     this._pointer.set((event.clientX - bounds.left) / bounds.width * 2 - 1, -(event.clientY - bounds.top) / bounds.height * 2 + 1);
@@ -475,11 +630,19 @@ export class PoseViewport {
     const context = this.renderer.getContext();
     const maximum = Math.min(context.getParameter(context.MAX_TEXTURE_SIZE), context.getParameter(context.MAX_RENDERBUFFER_SIZE));
     if (width > maximum || height > maximum) throw new Error(`この GPU の画像サイズ上限は ${maximum} ピクセルです。`);
+    if (this.transformControls.dragging) {
+      this.transformControls.pointerUp(null);
+      this._onPointerCancel();
+    }
+    this._stopOrbitMomentum();
     const oldSize = this.renderer.getSize(new THREE.Vector2());
     const oldPixelRatio = this.renderer.getPixelRatio();
     const gridVisible = this.grid.visible;
     const helperVisible = this.boneHelpers.visible;
     const placeholderVisible = this.placeholder.visible;
+    const transformVisible = this.transformHelper.visible;
+    const orbitEnabled = this.controls.enabled;
+    const transformEnabled = this.transformControls.enabled;
     const background = this.scene.background;
     const exportCamera = this.camera.clone();
     exportCamera.aspect = width / height;
@@ -491,6 +654,9 @@ export class PoseViewport {
       this.grid.visible = false;
       this.boneHelpers.visible = false;
       this.placeholder.visible = false;
+      this.transformHelper.visible = false;
+      this.controls.enabled = false;
+      this.transformControls.enabled = false;
       this.scene.background = null;
       this.renderer.setPixelRatio(1);
       this.renderer.setSize(width, height, false);
@@ -502,6 +668,9 @@ export class PoseViewport {
       this.grid.visible = gridVisible;
       this.boneHelpers.visible = helperVisible;
       this.placeholder.visible = placeholderVisible;
+      this.transformHelper.visible = transformVisible;
+      this.controls.enabled = orbitEnabled;
+      this.transformControls.enabled = transformEnabled;
       this.renderer.setPixelRatio(oldPixelRatio);
       this.renderer.setSize(oldSize.x, oldSize.y, false);
       this._exporting = false;
@@ -511,6 +680,9 @@ export class PoseViewport {
   }
 
   _clearModel() {
+    if (this.transformControls.dragging) this._onPointerCancel();
+    this.transformControls.detach();
+    this.lighting.update(null);
     if (this.vrm) {
       this.scene.remove(this.vrm.scene);
       VRMUtils.deepDispose(this.vrm.scene);
@@ -537,8 +709,14 @@ export class PoseViewport {
     this._resizeObserver.disconnect();
     this.canvas.removeEventListener('pointerdown', this._onPointerDown);
     this.canvas.removeEventListener('pointerup', this._onPointerUp);
-    this.controls.dispose();
+    this.canvas.removeEventListener('pointercancel', this._onPointerCancel);
+    window.removeEventListener('keydown', this._onKeyDown);
     this._clearModel();
+    this.controls.dispose();
+    this.transformControls.dispose();
+    this.transformHelper.removeFromParent();
+    this.transformProxy.removeFromParent();
+    this.lighting.dispose();
     VRMUtils.deepDispose(this.placeholder);
     this.grid.geometry.dispose();
     this.grid.material.dispose();

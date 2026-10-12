@@ -149,7 +149,13 @@ textarea::placeholder, input::placeholder { color: #64778b; opacity: 1; }
 .pose-name-badge { position: absolute; top: 17px; right: 18px; border: 1px solid #6d968335; padding: 7px 10px; display: flex; align-items: center; gap: 6px; font-size: 9px; max-width: 220px; color: #c0e1d0; background: #152d28b8; border-radius: 4px; pointer-events: none; }
 .pose-name-badge .icon { width: 12px; height: 12px; }
 .pose-name-badge span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.stage-toolbar { min-height: 56px; padding: 11px 17px 11px 22px; display: flex; align-items: center; justify-content: space-between; border-top: 1px solid #2b3542; background: #182330; gap: 10px; flex-shrink: 0; }
+.stage-toolbar { min-height: 56px; padding: 11px 17px 11px 22px; display: flex; flex-direction: column; align-items: stretch; border-top: 1px solid #2b3542; background: #182330; gap: 8px; flex-shrink: 0; }
+.stage-edit-row, .stage-view-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.edit-mode-tools { flex: 1; max-width: 270px; padding: 3px; }
+.edit-mode-tools button { padding: 6px 10px; font-size: 10px; }
+#transform-space { flex-shrink: 0; width: 110px; font-size: 9px; padding-left: 7px; padding-right: 15px; }
+.edit-hint { font-size: 8px; line-height: 1.6; color: #93aabb; }
+.stage-view-row { padding-top: 7px; border-top: 1px solid #2b3c4d; }
 .view-tools { display: flex; gap: 6px; align-items: center; }
 .toolbar-label { font-family: 'Segoe UI', sans-serif; font-size: 8px; font-weight: 600; letter-spacing: 1.5px; color: #627d90; margin-right: 6px; }
 select { color: #b4c4d1; background: #202d3b; border: 1px solid #3b4b5d; border-radius: 4px; font-size: 10px; padding: 7px 22px 7px 10px; }
@@ -170,7 +176,7 @@ input[type='checkbox'] { width: 13px; height: 13px; accent-color: #bddfc9; curso
 .inspector-heading .eyebrow { color: #819489; }
 .inspector-heading h2 { margin-top: 8px; font-size: 14px; font-weight: 600; letter-spacing: -.4px; }
 .inspector-heading .section-number { color: #b8c5bc; }
-.inspector-tabs { display: flex; padding: 0 19px; gap: 15px; border-bottom: 1px solid #d4dcd4; background: #e8ede6; }
+.inspector-tabs { display: flex; padding: 0 14px; gap: 6px; border-bottom: 1px solid #d4dcd4; background: #e8ede6; }
 .inspector-tabs button { display: flex; align-items: center; justify-content: center; gap: 7px; flex: 1; padding: 14px 4px 11px; color: #8a998e; background: transparent; border-bottom: 2px solid transparent; font-size: 11px; font-weight: 600; }
 .inspector-tabs button.active { color: #2a5643; border-bottom-color: #4c8069; }
 .inspector-tabs .icon { width: 16px; height: 16px; }
@@ -208,6 +214,14 @@ input[type='checkbox'] { width: 13px; height: 13px; accent-color: #bddfc9; curso
 .expression-row > label { font-size: 10px; color: #58705e; overflow-wrap: anywhere; }
 .expression-row > .number-input { border: 1px solid #d5ddd1; background: #fafbf8; border-radius: 3px; padding: 5px; text-align: center; }
 .expression-row > .range-input { grid-column: 1 / -1; width: 100%; margin-top: 4px; }
+.inspector-select { width: 100%; color: #46614f; border-color: #cbd7c8; background: #fafbf8; padding-top: 9px; padding-bottom: 9px; }
+.light-control-row { display: grid; grid-template-columns: 1fr 63px; align-items: center; gap: 10px; margin: 18px 0; }
+.light-control-row > label { color: #58705e; font-size: 10px; }
+.light-control-row > .number-wrapper { grid-column: 2; grid-row: 1; }
+.light-control-row > .range-input { grid-column: 1 / -1; grid-row: 2; width: 100%; }
+.inspector-checkbox { display: flex; align-items: center; gap: 9px; font-size: 10px; line-height: 1.7; color: #46614f; cursor: pointer; margin: 3px 0 16px; }
+.inspector-checkbox input { flex-shrink: 0; margin: 0; }
+.shadow-controls .inspector-help { margin-top: 2px; }
 .inspector-empty { text-align: center; color: #8c9f8e; font-size: 10px; line-height: 2; margin: 28px 0; }
 .inspector-tip { margin-top: auto; padding: 19px 20px; display: flex; align-items: flex-start; gap: 7px; background: #e6ebe2; border-top: 1px solid #d7dfd2; color: #899b87; }
 .inspector-tip .icon { width: 12px; height: 12px; margin-top: 2px; }

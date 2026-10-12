@@ -1,6 +1,6 @@
 {
   "name": "vrmpose",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "VRM pose editor with transparent 4K PNG export",
   "author": "VRMpose",
@@ -14,7 +14,8 @@
     "test:smoke": "node scripts/smoke.mjs",
     "test:desktop": "node scripts/desktop-smoke.mjs",
     "package:win": "npm run build && electron-builder --win portable --x64",
-    "package:win:dir": "npm run build && electron-builder --win --x64 --dir"
+    "package:win:dir": "npm run build && electron-builder --win --x64 --dir",
+    "test:mtoon": "node scripts/mtoon-smoke.mjs"
   },
   "dependencies": {
     "@pixiv/three-vrm": "3.5.5",
@@ -30,9 +31,28 @@
     "appId": "jp.vrmpose.desktop",
     "productName": "VRMpose",
     "asar": true,
-    "directories": { "output": "release" },
-    "files": ["dist/**/*", "electron/**/*", "shared/**/*", "package.json"],
-    "win": { "target": [{ "target": "portable", "arch": ["x64"] }], "signAndEditExecutable": false },
-    "portable": { "artifactName": "VRMpose-${version}-x64.exe" }
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "shared/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "signAndEditExecutable": false
+    },
+    "portable": {
+      "artifactName": "VRMpose-${version}-x64.exe"
+    }
   }
 }

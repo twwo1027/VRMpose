@@ -23,6 +23,7 @@ const icons = {
   close: '<path d="m6 6 12 12M6 18 18 6"/>',
   info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7h.01"/>',
   search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/>',
+  sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M2 12h2M20 12h2M5 5l1.5 1.5M17.5 17.5 19 19M5 19l1.5-1.5M17.5 6.5 19 5"/>',
 };
 const icon = (key, className = '') => `<svg class="icon ${className}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.65" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[key] || icons.cube}</svg>`;
 
@@ -69,36 +70,46 @@ document.querySelector('#app').innerHTML = `
       <div class="stage-frame"><div id="viewport"></div><div class="stage-vignette"></div>
         <div class="empty-stage" id="empty-stage"><div class="empty-model-icon">${icon('cube')}<span class="orbit orbit-one"></span><span class="orbit orbit-two"></span></div><span class="eyebrow">A BLANK CANVAS, ENDLESS POSSIBILITIES.</span><h2>あなたのモデルを、<br>あなたらしいポーズに。</h2><p id="empty-description">VRMファイルを読み込んで始めましょう。<br>ポーズも表情も、思いのままに。</p><button class="button button-accent" id="open-model-empty">${icon('plus')}VRMモデルを選ぶ</button><span class="empty-supported">.vrm &nbsp; · &nbsp; VRM 0.x / VRM 1.0</span></div>
         <div class="composition-label"><span class="frame-corner"></span><span id="composition-label">LANDSCAPE / 16:9</span></div>
-        <div class="camera-hint"><span>ドラッグで回転</span><span>右ドラッグで移動</span><span>ホイールでズーム</span></div>
+        <div class="camera-hint" id="camera-hint"><span>ボーンをクリック</span><span>リングをドラッグで回転</span><span>空白でカメラ操作</span></div>
         <div class="pose-name-badge" id="pose-name-badge" hidden>${icon('check')}<span id="current-pose-name"></span></div>
       </div>
-      <div class="stage-toolbar"><div class="view-tools"><span class="toolbar-label">VIEW</span><select id="camera-view" aria-label="カメラの方向"><option value="three-quarter">斜め</option><option value="front">正面</option><option value="back">背面</option><option value="left">左側</option><option value="right">右側</option></select><button class="icon-button" id="reset-view" title="カメラをリセット" aria-label="カメラをリセット">${icon('reset')}</button><span class="toolbar-divider"></span><label class="helper-toggle" title="床・ボーンのガイド表示。書き出したPNGには含まれません。"><input type="checkbox" id="show-helpers" checked><span>ガイド</span></label></div><button class="button button-small button-quiet" id="reset-pose" disabled>${icon('reset')}ポーズをリセット</button></div>
+      <div class="stage-toolbar">
+        <div class="stage-edit-row"><div class="segmented edit-mode-tools" role="group" aria-label="プレビューの操作"><button id="edit-rotate" class="active" aria-pressed="true" disabled>回転</button><button id="edit-translate" aria-pressed="false" disabled>移動</button><button id="edit-camera" aria-pressed="false" disabled>カメラ</button></div><select id="transform-space" aria-label="ボーン操作の座標軸" disabled><option value="local">ローカル軸</option><option value="world">ワールド軸</option></select></div>
+        <p class="edit-hint" id="edit-hint">ボーンを選び、色付きのリングをドラッグします。</p>
+        <div class="stage-view-row"><div class="view-tools"><span class="toolbar-label">VIEW</span><select id="camera-view" aria-label="カメラの方向"><option value="three-quarter">斜め</option><option value="front">正面</option><option value="back">背面</option><option value="left">左側</option><option value="right">右側</option></select><button class="icon-button" id="reset-view" title="カメラをリセット" aria-label="カメラをリセット">${icon('reset')}</button><span class="toolbar-divider"></span><label class="helper-toggle" title="床・ボーンのガイド表示。編集リングと矢印を含め、ガイドはPNGに入りません。"><input type="checkbox" id="show-helpers" checked><span>ガイド</span></label></div><button class="button button-small button-quiet" id="reset-pose" disabled>${icon('reset')}ポーズをリセット</button></div>
+      </div>
       <div class="export-strip"><div class="export-strip-title">${icon('download')}<div><strong>TRANSPARENT PNG</strong><span>背景を透過して、高解像度で。</span></div></div><div class="export-controls"><label for="output-size" class="sr-only">出力サイズ</label><select id="output-size"><option value="landscape">横長 · 3840 × 2160</option><option value="portrait">縦長 · 2160 × 3840</option><option value="square">正方形 · 4096 × 4096</option></select><span class="resolution-tag">4K</span></div></div>
     </section>
     <aside class="inspector-panel">
       <div class="inspector-heading"><div><span class="eyebrow">FINE TUNE</span><h2>細部まで、自分らしく。</h2></div><span class="section-number">02</span></div>
-      <div class="inspector-tabs" role="tablist" aria-label="モデルの調整"><button id="tab-bones" class="active" role="tab" aria-selected="true" aria-controls="bones-panel">${icon('bone')}ボーン</button><button id="tab-expressions" role="tab" aria-selected="false" aria-controls="expressions-panel">${icon('smile')}表情</button></div>
+      <div class="inspector-tabs" role="tablist" aria-label="モデルの調整"><button id="tab-bones" class="active" role="tab" aria-selected="true" aria-controls="bones-panel">${icon('bone')}ボーン</button><button id="tab-expressions" role="tab" aria-selected="false" aria-controls="expressions-panel">${icon('smile')}表情</button><button id="tab-lighting" role="tab" aria-selected="false" aria-controls="lighting-panel">${icon('sun')}光源</button></div>
       <section id="bones-panel" role="tabpanel" aria-labelledby="tab-bones">
         <div class="inspector-block bone-picker"><label class="field-label" for="bone-search">操作するボーン</label><div class="search-field">${icon('search')}<input id="bone-search" type="search" placeholder="ボーンを検索" disabled></div><select id="bone-select" size="7" aria-label="操作するボーン" disabled><option>モデルを読み込んでください</option></select><p class="inspector-help" id="bone-count">指や追加ボーンも編集できます。</p></div>
         <div class="inspector-block"><div class="control-heading"><h3>回転</h3><button class="text-button" id="reset-bone" disabled>リセット</button></div><p class="control-caption" id="selected-bone-label">ボーンを選択してください</p><div id="rotation-controls"></div><p class="inspector-help">選択したボーンの初期姿勢からの回転角度</p></div>
         <div class="inspector-block"><div class="control-heading"><h3>モデルの位置</h3><span class="unit-badge">m</span></div><div id="position-controls"></div><p class="inspector-help">腰を基準にモデル全体を移動します。</p></div>
       </section>
       <section id="expressions-panel" role="tabpanel" aria-labelledby="tab-expressions" hidden><div class="inspector-block"><div class="control-heading"><h3>表情パラメータ</h3><span class="unit-badge">0 – 1</span></div><p class="inspector-help">モデルに含まれる表情を組み合わせます。</p><div id="expression-controls" class="expression-controls"><p class="inspector-empty">VRMを読み込むと、<br>使用できる表情が表示されます。</p></div></div></section>
+      <section id="lighting-panel" role="tabpanel" aria-labelledby="tab-lighting" hidden>
+        <div class="inspector-block"><div class="control-heading"><h3>光の雰囲気</h3></div><label class="field-label" for="light-preset">ライティング</label><select id="light-preset" class="lighting-control inspector-select" disabled><option value="studio">スタジオ</option><option value="side">サイド光</option><option value="front">正面光</option></select><p class="inspector-help">主光源と補助光で、顔や服に立体感をつけます。</p></div>
+        <div class="inspector-block"><div class="control-heading"><h3>主光源の向き</h3><span class="unit-badge">°</span></div><div id="light-direction-controls"></div><p class="inspector-help">方位 0° はモデルの正面。高さで影の向きを調整できます。</p></div>
+        <div class="inspector-block"><div class="control-heading"><h3>明るさ</h3></div><div id="light-strength-controls"></div><p class="inspector-help">補助光を下げると、影のコントラストが強まります。</p></div>
+        <div class="inspector-block shadow-controls"><label class="inspector-checkbox"><input type="checkbox" id="light-shadows" class="lighting-control" checked disabled><span>モデルに影を落とす</span></label><label class="inspector-checkbox"><input type="checkbox" id="light-ground-shadow" class="lighting-control" disabled><span>足元の影も書き出す</span></label><p class="inspector-help">足元の影は半透明の画素としてPNGに入ります。床の色は書き出されません。</p></div>
+      </section>
       <div class="inspector-tip">${icon('info')}<p>モデルはお使いのPC内で処理されます。<br>VRMファイルを外部へ送信しません。</p></div>
     </aside>
   </main>
-  <footer class="app-footer"><span><span class="footer-dot"></span><span id="app-state">モデルを読み込む準備ができました</span></span><span>VRMpose <span class="footer-version">v0.1</span><span class="footer-divider">/</span>CREATE SOMETHING YOU.</span></footer>
+  <footer class="app-footer"><span><span class="footer-dot"></span><span id="app-state">モデルを読み込む準備ができました</span></span><span>VRMpose <span class="footer-version">v0.2</span><span class="footer-divider">/</span>CREATE SOMETHING YOU.</span></footer>
   <input id="vrm-input" type="file" accept=".vrm" hidden>
   <div id="toast" class="toast" role="status" aria-live="polite" hidden></div>
   <dialog id="save-dialog" class="dialog"><form id="save-form"><div class="dialog-title"><h2 id="save-dialog-title">ポーズを保存</h2><button type="button" class="icon-button" data-close-dialog="save-dialog" aria-label="閉じる">${icon('close')}</button></div><p class="dialog-description">ボーン・表情・モデルの位置をまとめて保存します。</p><label class="field-label" for="save-name">ポーズの名前</label><input id="save-name" class="text-field" type="text" maxlength="100" required placeholder="お気に入りのポーズ"><div class="dialog-actions"><button type="button" class="button button-quiet" data-close-dialog="save-dialog">キャンセル</button><button class="button button-accent" id="save-submit" type="submit">${icon('save')}保存する</button></div><p id="save-error" class="inline-error" role="alert" hidden></p></form></dialog>
-  <dialog id="help-dialog" class="dialog help-dialog"><div class="dialog-title"><h2>スタジオの使い方</h2><button class="icon-button" data-close-dialog="help-dialog" aria-label="閉じる">${icon('close')}</button></div><ol class="help-steps"><li><strong>VRMモデルを開く</strong><p>VRM 0.xと1.0のモデルを読み込めます。モデルの利用規約に沿ってお使いください。</p></li><li><strong>ポーズと表情をつくる</strong><p>無料の日本語指示やプリセットを適用して、右側のボーンと表情で細かく調整します。自由な指示はChatGPTの回答を貼り付けて使えます。</p></li><li><strong>構図を決める</strong><p>ドラッグで回転、右ドラッグで移動、ホイールでズーム。出力の縦横比を選んでから調整してください。</p></li><li><strong>保存・書き出し</strong><p>マイポーズに保存すると、後から別のモデルにも呼び出せます。PNGは透過背景で書き出されます。追加ボーンは同じモデルでの再利用に適しています。</p></li></ol><p class="helper-text">${isDesktop ? 'ポーズはこのPCのアプリ保存領域に保存されます。' : 'ブラウザ版のポーズは、このブラウザに保存されます。大切なポーズはJSONでも書き出してください。'}</p><button class="button button-accent button-full" data-close-dialog="help-dialog">つくり始める</button></dialog>
+  <dialog id="help-dialog" class="dialog help-dialog"><div class="dialog-title"><h2>スタジオの使い方</h2><button class="icon-button" data-close-dialog="help-dialog" aria-label="閉じる">${icon('close')}</button></div><ol class="help-steps"><li><strong>VRMモデルを開く</strong><p>VRM 0.xと1.0のモデルを読み込めます。モデルの利用規約に沿ってお使いください。</p></li><li><strong>ポーズと表情をつくる</strong><p>無料の日本語指示やプリセットを適用します。プレビューのボーンをクリックし、回転リングをドラッグして調整できます。移動の矢印はモデル全体を動かします。表情や数値は右側で編集できます。</p></li><li><strong>構図を決める</strong><p>カメラモードでドラッグするとカメラが回転します。右ドラッグで移動、ホイールでズーム。光源タブで光の向き・明るさ・影を調整し、出力比率を選んで構図を決めてください。</p></li><li><strong>保存・書き出し</strong><p>マイポーズに保存すると、後から呼び出せます。PNGは透過背景で書き出され、操作ハンドルやガイドは入りません。足元の影を選ぶと、その影だけが半透明で入ります。追加ボーンは同じモデルでの再利用に適しています。</p></li></ol><p class="helper-text">${isDesktop ? 'ポーズはこのPCのアプリ保存領域に保存されます。' : 'ブラウザ版のポーズは、このブラウザに保存されます。大切なポーズはJSONでも書き出してください。'}</p><button class="button button-accent button-full" data-close-dialog="help-dialog">つくり始める</button></dialog>
   <dialog id="copy-dialog" class="dialog"><div class="dialog-title"><h2>ChatGPT用の指示</h2><button class="icon-button" data-close-dialog="copy-dialog" aria-label="閉じる">${icon('close')}</button></div><p class="dialog-description">選択した指示を Ctrl+C（Macは⌘C）でコピーして、ChatGPTに貼り付けてください。</p><textarea id="copy-manual-text" class="text-field code-field" rows="10" readonly aria-label="コピーするChatGPT用の指示"></textarea><div class="dialog-actions"><button class="button button-accent" data-close-dialog="copy-dialog">完了</button></div></dialog>
 `;
 
 const $ = selector => document.querySelector(selector);
 let viewport;
 let rendererError;
-try { viewport = new PoseViewport($('#viewport'), { onBoneSelect: selectBone }); }
+try { viewport = new PoseViewport($('#viewport'), { onBoneSelect: handleViewportBoneSelect, onPoseChange: handleViewportPoseChange }); }
 catch (error) { rendererError = error; }
 const state = { model: null, selectedBone: null, library: [], poseName: '無題のポーズ', loading: false, exporting: false, saving: false, saveTarget: null, size: 'landscape' };
 const sizes = { landscape: [3840, 2160, 'LANDSCAPE / 16:9'], portrait: [2160, 3840, 'PORTRAIT / 9:16'], square: [4096, 4096, 'SQUARE / 1:1'] };
@@ -129,7 +140,11 @@ function syncEnabled() {
   $('#open-model-empty').disabled = busy || !viewport;
   ['#camera-view', '#reset-view', '#show-helpers', '#output-size'].forEach(selector => { $(selector).disabled = busy || !viewport; });
   document.querySelectorAll('.model-control, .preset-card').forEach(control => { control.disabled = !ready; });
+  document.querySelectorAll('.lighting-control').forEach(control => { control.disabled = !ready; });
+  $('#light-ground-shadow').disabled = !ready || !$('#light-shadows').checked;
   document.querySelectorAll('.library-apply').forEach(control => { control.disabled = !ready; });
+  viewport?.setInteractionEnabled(!busy);
+  syncEditTools();
 }
 
 function setPoseName(name) {
@@ -140,6 +155,49 @@ function setPoseName(name) {
 
 function markAdjusted() {
   if (!state.poseName.endsWith('・調整済み')) setPoseName(`${state.poseName.replace(/・調整済み$/, '')}・調整済み`);
+}
+
+function handleViewportPoseChange() {
+  if (!state.model || state.loading || state.exporting) return;
+  updateInspector();
+  markAdjusted();
+  $('#app-state').textContent = viewport.getEditMode() === 'translate' ? 'プレビューでモデルの位置を調整中' : 'プレビューでボーンの回転を調整中';
+}
+
+function handleViewportBoneSelect(key) {
+  selectBone(key);
+  if (state.model) setInspectorTab('bones');
+}
+
+function syncEditTools() {
+  const mode = viewport?.getEditMode() || 'rotate';
+  const ready = Boolean(state.model) && !state.loading && !state.exporting;
+  for (const item of ['rotate', 'translate', 'camera']) {
+    const button = $(`#edit-${item}`);
+    button.classList.toggle('active', mode === item);
+    button.setAttribute('aria-pressed', String(mode === item));
+    button.disabled = !ready;
+  }
+  $('#transform-space').value = viewport?.getTransformSpace() || 'local';
+  $('#transform-space').disabled = !ready || mode === 'camera';
+  const hints = {
+    rotate: ['ボーンを選び、色付きのリングをドラッグします。', ['ボーンをクリック', 'リングで回転', '空白でカメラ操作']],
+    translate: ['移動は腰を基準にモデル全体を動かします。', ['矢印でモデルを移動', '右ドラッグでカメラ移動', 'ホイールでズーム']],
+    camera: ['ドラッグでカメラ回転、右ドラッグで移動します。', ['ドラッグでカメラ回転', '右ドラッグで移動', 'ホイールでズーム']],
+  };
+  const [description, cameraHints] = hints[mode] || hints.rotate;
+  $('#edit-hint').textContent = description;
+  $('#camera-hint').replaceChildren(...cameraHints.map(text => {
+    const span = document.createElement('span'); span.textContent = text; return span;
+  }));
+}
+
+function setInspectorTab(tab) {
+  for (const item of ['bones', 'expressions', 'lighting']) {
+    $(`#tab-${item}`).classList.toggle('active', tab === item);
+    $(`#tab-${item}`).setAttribute('aria-selected', String(tab === item));
+    $(`#${item}-panel`).hidden = tab !== item;
+  }
 }
 
 function getPose() { return viewport.capturePose(state.poseName); }
@@ -175,6 +233,7 @@ function selectBone(key) {
   $('#selected-bone-label').textContent = state.model.bones.find(bone => bone.key === key)?.label || key;
   viewport.setSelectedBone(key);
   updateInspector();
+  syncEditTools();
 }
 
 function renderBoneOptions() {
@@ -226,6 +285,45 @@ function createAxisControls(type, min, max, step, suffix) {
 
 createAxisControls('rotation', -180, 180, 0.5, '°');
 createAxisControls('position', -5, 5, 0.01, 'm');
+
+const lightControls = [
+  { key: 'azimuth', label: '方位', host: 'light-direction-controls', min: -180, max: 180, step: 1, unit: '°' },
+  { key: 'elevation', label: '高さ', host: 'light-direction-controls', min: 5, max: 85, step: 1, unit: '°' },
+  { key: 'intensity', label: '主光源', host: 'light-strength-controls', min: 0, max: 5, step: 0.05, unit: '' },
+  { key: 'fill', label: '補助光', host: 'light-strength-controls', min: 0, max: 2, step: 0.05, unit: '' },
+];
+
+function syncLightingInputs() {
+  const lighting = viewport?.getLighting();
+  if (!lighting) return;
+  $('#light-preset').value = lighting.preset;
+  for (const { key } of lightControls) {
+    $(`#light-${key}`).value = lighting[key];
+    $(`#light-${key}-number`).value = Math.round(lighting[key] * 100) / 100;
+  }
+  $('#light-shadows').checked = lighting.shadows;
+  $('#light-ground-shadow').checked = lighting.groundShadow;
+}
+
+for (const { key, label, host, min, max, step, unit } of lightControls) {
+  const row = document.createElement('div');
+  row.className = 'light-control-row';
+  row.innerHTML = `<label for="light-${key}">${label}</label><input class="lighting-control range-input" id="light-${key}" type="range" min="${min}" max="${max}" step="${step}" disabled><div class="number-wrapper"><input class="lighting-control number-input" id="light-${key}-number" type="number" min="${min}" max="${max}" step="${step}" aria-label="光源の${label}" disabled><span>${unit}</span></div>`;
+  $(`#${host}`).append(row);
+  const range = row.querySelector('.range-input');
+  const number = row.querySelector('.number-input');
+  const change = source => {
+    if (!state.model || state.loading || state.exporting) return;
+    const value = Number(source.value);
+    if (!Number.isFinite(value)) { syncLightingInputs(); return; }
+    viewport.setLighting({ [key]: Math.min(max, Math.max(min, value)) });
+    syncLightingInputs();
+    $('#app-state').textContent = '光源を調整しました';
+  };
+  range.addEventListener('input', () => change(range));
+  number.addEventListener('change', () => change(number));
+}
+syncLightingInputs();
 
 function renderExpressions() {
   $('#expression-controls').replaceChildren();
@@ -333,13 +431,41 @@ for (const mode of ['local', 'chatgpt']) {
   });
 }
 
-for (const tab of ['bones', 'expressions']) {
-  $(`#tab-${tab}`).addEventListener('click', () => {
-    for (const item of ['bones', 'expressions']) {
-      $(`#tab-${item}`).classList.toggle('active', tab === item);
-      $(`#tab-${item}`).setAttribute('aria-selected', String(tab === item));
-      $(`#${item}-panel`).hidden = tab !== item;
+for (const tab of ['bones', 'expressions', 'lighting']) {
+  $(`#tab-${tab}`).addEventListener('click', () => setInspectorTab(tab));
+}
+
+for (const mode of ['rotate', 'translate', 'camera']) {
+  $(`#edit-${mode}`).addEventListener('click', () => {
+    if (!state.model || state.loading || state.exporting) return;
+    if (mode === 'translate') {
+      const hips = state.model.bones.find(bone => bone.key === 'hips');
+      if (hips) selectBone(hips.key);
     }
+    viewport.setEditMode(mode);
+    syncEditTools();
+    if (mode !== 'camera') setInspectorTab('bones');
+  });
+}
+$('#transform-space').addEventListener('change', () => {
+  if (!state.model || state.loading || state.exporting) return;
+  viewport.setTransformSpace($('#transform-space').value);
+  syncEditTools();
+});
+$('#light-preset').addEventListener('change', () => {
+  if (!state.model || state.loading || state.exporting) return;
+  viewport.setLighting({ preset: $('#light-preset').value });
+  syncLightingInputs();
+  syncEnabled();
+  $('#app-state').textContent = 'ライティングを変更しました';
+});
+for (const [selector, key] of [['#light-shadows', 'shadows'], ['#light-ground-shadow', 'groundShadow']]) {
+  $(selector).addEventListener('change', () => {
+    if (!state.model || state.loading || state.exporting) return;
+    viewport.setLighting({ [key]: $(selector).checked });
+    syncLightingInputs();
+    syncEnabled();
+    $('#app-state').textContent = '影の表示を変更しました';
   });
 }
 
